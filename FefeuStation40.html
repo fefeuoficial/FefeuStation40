@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Fefeu Station</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;800&family=Figtree:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#eef4f2;--panel:#fff;--ink:#12303a;--mute:#5b7780;--line:#c9dad6;--accent:#e08a00;--onaccent:#1b1200;--tile:#0c1c22;
+color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0e2229;--panel:#143039;--ink:#e6f1ee;--mute:#8fb0b5;--line:#244851;--accent:#ffb347;--onaccent:#1b1200;--tile:#071418;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#0e2229;--panel:#143039;--ink:#e6f1ee;--mute:#8fb0b5;--line:#244851;--accent:#ffb347;--onaccent:#1b1200;--tile:#071418;color-scheme:dark}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*,*::before,*::after{box-sizing:inherit}
+body{margin:0;background:var(--bg);color:var(--ink);font:400 16px/1.5 Figtree,system-ui,sans-serif;min-height:100vh}
+header{display:flex;flex-wrap:wrap;gap:12px 24px;align-items:center;justify-content:space-between;padding:18px clamp(14px,3vw,32px) 8px}
+h1{margin:0;font:800 clamp(28px,5vw,44px)/1 "Bricolage Grotesque",Figtree,sans-serif;letter-spacing:-.02em}
+h1 small{display:block;margin-top:6px;font:400 15px/1.4 Figtree,sans-serif;color:var(--mute);letter-spacing:0}
+.bar{display:flex;flex-wrap:wrap;gap:8px;padding:8px clamp(14px,3vw,32px) 16px}
+input{flex:1 1 280px;min-width:0;padding:11px 14px;border:1.5px solid var(--line);border-radius:10px;background:var(--panel);color:var(--ink);font:inherit}
+button{padding:11px 16px;border:1.5px solid var(--line);border-radius:10px;background:var(--panel);color:var(--ink);font:600 15px Figtree,sans-serif;cursor:pointer}
+button.primary{background:var(--accent);border-color:var(--accent);color:var(--onaccent)}
+button:focus-visible,input:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+#msg{padding:0 clamp(14px,3vw,32px);min-height:22px;color:var(--mute);font-size:14px}
+#grid{display:grid;gap:10px;padding:0 clamp(14px,3vw,32px) 32px;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr))}
+.tile{position:relative;background:var(--tile);border-radius:14px;overflow:hidden;aspect-ratio:16/9;border:1.5px solid var(--line)}
+.tile iframe,.tile video{width:100%;height:100%;border:0;display:block;background:#000;object-fit:contain}
+.tag{position:absolute;left:8px;top:8px;display:flex;gap:6px;align-items:center;max-width:calc(100% - 60px)}
+.tag span{background:rgba(0,0,0,.7);color:#fff;padding:3px 9px;border-radius:99px;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.x{position:absolute;right:8px;top:8px;padding:4px 10px;background:rgba(0,0,0,.7);border:0;color:#fff;border-radius:99px}
+.vol{position:absolute;left:8px;bottom:8px;display:flex;gap:6px;align-items:center;background:rgba(0,0,0,.7);padding:4px 10px;border-radius:99px;color:#fff;font-size:13px}
+.vol input{flex:none;width:90px;padding:0;border:0;accent-color:var(--accent)}
+.ctl{position:absolute;left:8px;bottom:8px;display:flex;gap:8px;align-items:center;background:rgba(0,0,0,.75);padding:3px 10px 3px 3px;border-radius:99px}
+.ctl input{flex:none;width:90px;padding:0;border:0;background:none;accent-color:var(--accent)}
+.mute{padding:6px 12px;background:rgba(255,255,255,.15);border:0;color:#fff;border-radius:99px;font-size:14px}
+.empty{grid-column:1/-1;padding:48px 20px;text-align:center;color:var(--mute);border:2px dashed var(--line);border-radius:14px}
+.empty b{display:block;color:var(--ink);font:800 22px "Bricolage Grotesque",Figtree,sans-serif;margin-bottom:6px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Fefeu Station<small>Assista várias lives juntas, direto no navegador.</small></h1>
+  <button id="theme" type="button">Alternar tema</button>
+</header>
+<form class="bar" id="f" onsubmit="return false">
+  <input id="url" type="url" placeholder="Cole o link de uma live (Twitch, YouTube ou Kick)" aria-label="Link da live">
+  <button class="primary" id="add" type="button">Adicionar live</button>
+</form>
+<div id="msg" role="status"></div>
+<main id="grid"></main>
+<script>
+(function(){
+var grid=document.getElementById('grid'),msg=document.getElementById('msg'),input=document.getElementById('url');
+var KEY='fefeu-station-lives',lives=[];
+try{lives=JSON.parse(localStorage.getItem(KEY)||'[]').filter(function(l){return l.kind})}catch(e){lives=[]}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(lives))}catch(e){}}
+function say(t){msg.textContent=t}
+function parse(raw){
+  var u;try{u=new URL(raw.trim())}catch(e){return null}
+  var h=u.hostname.replace(/^www\./,''),p=u.pathname.split('/').filter(Boolean);
+  if(h==='twitch.tv'&&p[0])return{kind:'twitch',id:p[0],name:'Twitch · '+p[0],muted:true};
+  if(h==='kick.com'&&p[0])return{kind:'kick',id:p[0],name:'Kick · '+p[0],muted:true};
+  var id=null;
+  if(h==='youtu.be')id=p[0];
+  else if(h.endsWith('youtube.com'))id=u.searchParams.get('v')||((p[0]==='live'||p[0]==='embed')?p[1]:null);
+  if(id)return{kind:'yt',id:id,name:'YouTube',muted:true};
+  return null;
+}
+function srcOf(l){var m=l.muted;
+  if(l.kind==='twitch')return 'https://player.twitch.tv/?channel='+encodeURIComponent(l.id)+'&parent='+location.hostname+'&autoplay=true&muted='+m;
+  if(l.kind==='kick')return 'https://player.kick.com/'+encodeURIComponent(l.id)+'?autoplay=true&muted='+m;
+  return 'https://www.youtube.com/embed/'+encodeURIComponent(l.id)+'?autoplay=1&playsinline=1&enablejsapi=1&mute='+(m?1:0);
+}
+function setMute(item,f){
+  var next=!item.muted,w=f.contentWindow;
+  if(item.kind==='yt'&&w){w.postMessage(JSON.stringify({event:'command',func:next?'mute':'unMute',args:[]}),'https://www.youtube.com')}
+  else if(item.kind==='twitch'&&w){w.postMessage({eventName:'setMuted',params:[next],namespace:'twitch-embed-player-proxy'},'https://player.twitch.tv')}
+  else{item.muted=next;f.src=srcOf(item);return}
+  item.muted=next;
+}
+function setVol(item,f){
+  var w=f.contentWindow,v=item.vol;if(!w)return;
+  if(item.kind==='yt')w.postMessage(JSON.stringify({event:'command',func:'setVolume',args:[v]}),'https://www.youtube.com');
+  else if(item.kind==='twitch')w.postMessage({eventName:'setVolume',params:[v/100],namespace:'twitch-embed-player-proxy'},'https://player.twitch.tv');
+}
+function tile(label,child,extra){
+  var d=document.createElement('div');d.className='tile';d.appendChild(child);
+  var t=document.createElement('div');t.className='tag';var s=document.createElement('span');s.textContent=label;t.appendChild(s);d.appendChild(t);
+  var x=document.createElement('button');x.type='button';x.className='x';x.textContent='Fechar';x.setAttribute('aria-label','Fechar '+label);
+  x.onclick=function(){if(extra&&extra.stop)extra.stop();d.remove();if(extra&&extra.idx!==undefined){lives.splice(lives.indexOf(extra.item),1);save()}render()};
+  d.appendChild(x);return d;
+}
+function render(){
+  grid.querySelectorAll('.tile.live').forEach(function(n){n.remove()});
+  var old=grid.querySelector('.empty');if(old)old.remove();
+  lives.forEach(function(item,i){
+    var f=document.createElement('iframe');item.muted=true;item.vol=100;f.src=srcOf(item);f.allowFullscreen=true;f.title=item.name;
+    f.allow='autoplay; fullscreen; picture-in-picture';
+    var t=tile(item.name,f,{idx:i,item:item});t.classList.add('live');
+    var mb=document.createElement('button');mb.type='button';mb.className='mute';
+    function lab(){mb.textContent=item.muted?'Ativar som':'Silenciar';mb.setAttribute('aria-label',(item.muted?'Ativar som de ':'Silenciar ')+item.name)}
+    lab();
+    mb.onclick=function(){setMute(item,f);save();lab()};
+    var box=document.createElement('div');box.className='ctl';box.appendChild(mb);
+    if(item.kind!=='kick'){var vr=document.createElement('input');vr.type='range';vr.min=0;vr.max=100;vr.value=item.vol;vr.setAttribute('aria-label','Volume de '+item.name);
+      vr.oninput=function(){item.vol=+vr.value;setVol(item,f)};box.appendChild(vr)}
+    else{var hn=document.createElement('span');hn.textContent='Volume: use o controle do player';hn.style.cssText='color:#fff;font-size:13px';box.appendChild(hn)}
+    t.appendChild(box);grid.insertBefore(t,grid.firstChild);
+  });
+  if(!grid.children.length){
+    var e=document.createElement('div');e.className='empty';
+    e.innerHTML='<b>Nenhuma live na sala ainda</b>Cole um link acima para adicionar a primeira.';
+    grid.appendChild(e);
+  }
+}
+function addLive(){
+  var r=parse(input.value);
+  if(!r){say('Link não reconhecido. Use um endereço de canal da Twitch ou Kick, ou um vídeo do YouTube.');return}
+  if(lives.some(function(l){return l.kind===r.kind&&l.id===r.id})){say('Essa live já está na sala.');return}
+  lives.push(r);save();input.value='';say('Live adicionada.');render();
+}
+function addMedia(stream,label){
+  var e=grid.querySelector('.empty');if(e)e.remove();
+  var v=document.createElement('video');v.autoplay=true;v.playsInline=true;v.srcObject=stream;
+  var t=tile(label,v,{stop:function(){stream.getTracks().forEach(function(k){k.stop()})}});
+  if(stream.getAudioTracks().length){
+    var w=document.createElement('label');w.className='vol';w.textContent='Volume ';
+    var r=document.createElement('input');r.type='range';r.min=0;r.max=1;r.step=.05;r.value=1;r.setAttribute('aria-label','Volume de '+label);
+    r.oninput=function(){v.volume=+r.value};w.appendChild(r);t.appendChild(w);
+  }
+  grid.appendChild(t);
+  stream.getVideoTracks()[0].onended=function(){t.remove();render()};
+}
+document.getElementById('add').onclick=addLive;
+input.addEventListener('keydown',function(e){if(e.key==='Enter')addLive()});
+document.getElementById('theme').onclick=function(){
+  var r=document.documentElement,dark=r.dataset.theme?r.dataset.theme==='dark':matchMedia('(prefers-color-scheme:dark)').matches;
+  r.dataset.theme=dark?'light':'dark';
+};
+render();
+})();
+</script>
+</body>
+</html>
